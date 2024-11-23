@@ -27,8 +27,9 @@ set VERBOSE=%VERBOSE:"=%
 gcc ^
     !DEBUG! ^
     -o ./build/g.exe ^
-    ./src/main.cpp ^
+    ./src/main.c ^
     -O0 ^
+    -std=c99 ^
     -Wall ^
     -I./raylib/include/ ^
     -L./raylib/lib/ ^
