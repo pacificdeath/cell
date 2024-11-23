@@ -92,6 +92,7 @@ uint8 get_direction(Coord from, Coord to) {
     } else if (from.x < to.x) {
         return ORTHAGONAL_E;
     }
+    return NO_DIRECTION;
 }
 
 bool valid_cell(State *state, Coord position, int cell_bits) {
@@ -581,6 +582,7 @@ int main(void) {
 
     bool ready_for_update = false;
     bool is_moving = false;
+    int input_key = 0;
     Coord debug_cells[2] = { { 0, 0 }, { GRID_WIDTH - 1, GRID_HEIGHT - 1 } };
 
     while (!WindowShouldClose()) {
@@ -599,12 +601,22 @@ int main(void) {
         bool left_mouse_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
         bool mouse_condition = left_mouse_pressed && astar_path(state, state->player.position, mouse_frame_coord) != state->player.position;
 
+        if (IsKeyDown(KEY_UP)) {
+            input_key = KEY_UP;
+        } else if (IsKeyDown(KEY_LEFT)) {
+            input_key = KEY_LEFT;
+        } else if (IsKeyDown(KEY_DOWN)) {
+            input_key = KEY_DOWN;
+        } else if (IsKeyDown(KEY_RIGHT)) {
+            input_key = KEY_RIGHT;
+        }
+
         if (mouse_condition) {
             state->mouse_target_coord = mouse_frame_coord;
         }
 
         bool wait = IsKeyPressed(KEY_SPACE);
-        if (mouse_condition || wait) {
+        if (mouse_condition || input_key || wait) {
             is_moving = true;
         }
 
@@ -638,9 +650,24 @@ int main(void) {
             if (wait) {
                 is_moving = false;
             } else {
-                state->player.position = astar_path(state, state->player.previous_position, state->mouse_target_coord);
-                if (state->player.position == state->mouse_target_coord) {
+                if (input_key) {
                     is_moving = false;
+                    Coord requested_cell = state->player.previous_position;
+                    switch (input_key) {
+                    case KEY_UP: requested_cell.y--; break;
+                    case KEY_LEFT: requested_cell.x--; break;
+                    case KEY_DOWN: requested_cell.y++; break;
+                    case KEY_RIGHT: requested_cell.x++; break;
+                    }
+                    if (valid_cell(state, requested_cell, CELL_BIT_WALKABLE)) {
+                        state->player.position = requested_cell;
+                    }
+                    input_key = 0;
+                } else {
+                    state->player.position = astar_path(state, state->player.previous_position, state->mouse_target_coord);
+                    if (state->player.position == state->mouse_target_coord) {
+                        is_moving = false;
+                    }
                 }
                 state->player.direction = get_direction(state->player.previous_position, state->player.position);
                 update_visibility(state);
@@ -718,8 +745,10 @@ int main(void) {
             }
         }
 
+        /*
         draw_cell(debug_cells[0], PURPLE);
         draw_cell(debug_cells[1], YELLOW);
+        */
 
         draw_creature(state, &state->player);
 

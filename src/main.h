@@ -14,6 +14,7 @@
 #define CREATURE_CAPACITY 2
 #define TIME_PER_TURN 0.05f
 #define TIME_PER_ANIMATION 0.2f
+#define NO_DIRECTION 255
 
 #define COLOR_UNDISCOVERED ((Color){0,0,0,255})
 #define COLOR_EMPTY ((Color){64,32,0,255})
