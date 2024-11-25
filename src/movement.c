@@ -1,8 +1,8 @@
 #include <math.h>
 #include "main.h"
 
-Cell astar_path(State *state, Cell start, Cell goal, int walkable_bits) {
-    if (cell_eq(start, goal)) {
+IntX2 astar_path(State *state, IntX2 start, IntX2 goal, int walkable_flags) {
+    if (intX2_eq(start, goal)) {
         return start;
     }
 
@@ -35,7 +35,7 @@ Cell astar_path(State *state, Cell start, Cell goal, int walkable_bits) {
         }
         ANode *current = a->open_list[current_idx];
         if (current->position.x == goal.x && current->position.y == goal.y) {
-            while (cell_neq(current->came_from->position, start)) {
+            while (intX2_neq(current->came_from->position, start)) {
                 current = current->came_from;
             }
             return current->position;
@@ -50,14 +50,14 @@ Cell astar_path(State *state, Cell start, Cell goal, int walkable_bits) {
         }
 
         const int neighbour_count = 4;
-        Cell neighbours[neighbour_count];
-        neighbours[0] = (Cell) { .x = current->position.x,     .y = current->position.y + 1    };
-        neighbours[1] = (Cell) { .x = current->position.x - 1, .y = current->position.y        };
-        neighbours[2] = (Cell) { .x = current->position.x,     .y = current->position.y - 1    };
-        neighbours[3] = (Cell) { .x = current->position.x + 1, .y = current->position.y        };
+        IntX2 neighbours[neighbour_count];
+        neighbours[0] = (IntX2) { .x = current->position.x,     .y = current->position.y + 1    };
+        neighbours[1] = (IntX2) { .x = current->position.x - 1, .y = current->position.y        };
+        neighbours[2] = (IntX2) { .x = current->position.x,     .y = current->position.y - 1    };
+        neighbours[3] = (IntX2) { .x = current->position.x + 1, .y = current->position.y        };
 
         for (int i = 0; i < neighbour_count; i++) {
-            if (!is_valid_cell(state, neighbours[i], walkable_bits)) {
+            if (!is_cell_valid(state, neighbours[i], walkable_flags)) {
                 continue;
             }
             ANode *n = &(a->all_list[neighbours[i].x][neighbours[i].y]);
@@ -68,7 +68,7 @@ Cell astar_path(State *state, Cell start, Cell goal, int walkable_bits) {
                 n->f_cost = n->g_cost + manhattan_distance(n->position, goal);
                 bool neighbour_in_closed_list = false;
                 for (int i = 0; i < a->closed_list_count; i++) {
-                    if (cell_eq(a->closed_list[i]->position, n->position)) {
+                    if (intX2_eq(a->closed_list[i]->position, n->position)) {
                         neighbour_in_closed_list = true;
                         break;
                     }
@@ -78,7 +78,7 @@ Cell astar_path(State *state, Cell start, Cell goal, int walkable_bits) {
                 }
                 bool neighbour_in_open_list = false;
                 for (int i = 0; i < a->open_list_count; i++) {
-                    if (cell_eq(a->open_list[i]->position, n->position)) {
+                    if (intX2_eq(a->open_list[i]->position, n->position)) {
                         neighbour_in_open_list = true;
                         break;
                     }
@@ -95,26 +95,26 @@ Cell astar_path(State *state, Cell start, Cell goal, int walkable_bits) {
     return start;
 }
 
-CoordAndDirection bounce_path(State *state, Cell start, uint8 direction) {
-    Cell n = {start.x, start.y - 1};
-    Cell w = {start.x - 1, start.y};
-    Cell s = {start.x, start.y + 1};
-    Cell e = {start.x + 1, start.y};
+CoordAndDirection bounce_path(State *state, IntX2 start, uint8 direction) {
+    IntX2 n = {start.x, start.y - 1};
+    IntX2 w = {start.x - 1, start.y};
+    IntX2 s = {start.x, start.y + 1};
+    IntX2 e = {start.x + 1, start.y};
 
-    bool n_wall = !is_valid_cell(state, n, CELL_BIT_WALKABLE);
-    bool w_wall = !is_valid_cell(state, w, CELL_BIT_WALKABLE);
-    bool s_wall = !is_valid_cell(state, s, CELL_BIT_WALKABLE);
-    bool e_wall = !is_valid_cell(state, e, CELL_BIT_WALKABLE);
+    bool n_wall = !is_cell_valid(state, n, CELL_FLAG_WALKABLE);
+    bool w_wall = !is_cell_valid(state, w, CELL_FLAG_WALKABLE);
+    bool s_wall = !is_cell_valid(state, s, CELL_FLAG_WALKABLE);
+    bool e_wall = !is_cell_valid(state, e, CELL_FLAG_WALKABLE);
 
-    Cell ne = {start.x + 1, start.y - 1};
-    Cell nw = {start.x - 1, start.y - 1};
-    Cell sw = {start.x - 1, start.y + 1};
-    Cell se = {start.x + 1, start.y + 1};
+    IntX2 ne = {start.x + 1, start.y - 1};
+    IntX2 nw = {start.x - 1, start.y - 1};
+    IntX2 sw = {start.x - 1, start.y + 1};
+    IntX2 se = {start.x + 1, start.y + 1};
 
-    bool ne_open = is_valid_cell(state, ne, CELL_BIT_WALKABLE);
-    bool nw_open = is_valid_cell(state, nw, CELL_BIT_WALKABLE);
-    bool sw_open = is_valid_cell(state, sw, CELL_BIT_WALKABLE);
-    bool se_open = is_valid_cell(state, se, CELL_BIT_WALKABLE);
+    bool ne_open = is_cell_valid(state, ne, CELL_FLAG_WALKABLE);
+    bool nw_open = is_cell_valid(state, nw, CELL_FLAG_WALKABLE);
+    bool sw_open = is_cell_valid(state, sw, CELL_FLAG_WALKABLE);
+    bool se_open = is_cell_valid(state, se, CELL_FLAG_WALKABLE);
 
     int bounce = -1;
 
@@ -173,25 +173,25 @@ CoordAndDirection bounce_path(State *state, Cell start, uint8 direction) {
     return (CoordAndDirection) { start, direction };
 }
 
-Cell random_wander(State *state, Cell start, uint8 direction) {
+IntX2 random_wander(State *state, IntX2 start, uint8 direction) {
     int random = GetRandomValue(0, 3);
-    Cell backtrack_cell = cell_in_direction(start, (direction + 2) % 4);
+    IntX2 backtrack_cell = cell_in_direction(start, (direction + 2) % 4);
     for (int i = 0; i < 4; i++) {
-        Cell position;
+        IntX2 position;
         switch (random) {
-        case 0: position = (Cell) {start.x, start.y - 1}; break;
-        case 1: position = (Cell) {start.x - 1, start.y}; break;
-        case 2: position = (Cell) {start.x, start.y + 1}; break;
-        case 3: position = (Cell) {start.x + 1, start.y}; break;
+        case 0: position = (IntX2) {start.x, start.y - 1}; break;
+        case 1: position = (IntX2) {start.x - 1, start.y}; break;
+        case 2: position = (IntX2) {start.x, start.y + 1}; break;
+        case 3: position = (IntX2) {start.x + 1, start.y}; break;
         }
-        bool valid = is_valid_cell(state, position, CELL_BIT_WALKABLE);
-        bool backtrack = cell_eq(backtrack_cell, position);
+        bool valid = is_cell_valid(state, position, CELL_FLAG_WALKABLE);
+        bool backtrack = intX2_eq(backtrack_cell, position);
         if (valid && !backtrack) {
             return position;
         }
         random = (random + 1) % 4;
     }
-    bool okay_backtrack_if_that_is_the_only_way = is_valid_cell(state, backtrack_cell, CELL_BIT_WALKABLE);
+    bool okay_backtrack_if_that_is_the_only_way = is_cell_valid(state, backtrack_cell, CELL_FLAG_WALKABLE);
     if (okay_backtrack_if_that_is_the_only_way) {
         return backtrack_cell;
     }

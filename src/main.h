@@ -5,8 +5,10 @@
 #include <math.h>
 #include "../raylib/include/raylib.h"
 
-#define GRID_WIDTH 40
-#define GRID_HEIGHT 30
+#define GRID_WIDTH 401
+#define GRID_HEIGHT 301
+#define GAME_WIDTH 40
+#define GAME_HEIGHT 30
 #define GRID_LARGEST_SIDE ((GRID_WIDTH > GRID_HEIGHT) ? GRID_WIDTH : GRID_HEIGHT)
 #define CELLAMOUNT (GRID_WIDTH * GRID_HEIGHT)
 #define CELLSIZE 40
@@ -16,7 +18,7 @@
 #define TIME_PER_TURN 0.05f
 #define TIME_PER_ANIMATION 0.4f
 #define NO_DIRECTION 255
-#define INVALID_CELL ((Cell){ -1, -1 })
+#define INVALID_CELL ((IntX2) { -1, -1 })
 
 #define COLOR_UNDISCOVERED ((Color){0,0,0,255})
 #define COLOR_GROUND_VISIBLE ((Color){64,32,0,255})
@@ -31,52 +33,56 @@
 typedef uint8_t uint8;
 typedef uint16_t uint16;
 
-typedef enum Orthagonal {
+enum StateFlags {
+    GAME_FLAG_READY_FOR_UPDATE = 1 << 0,
+    GAME_FLAG_IS_MOVING = 1 << 1,
+};
+
+enum Orthagonal {
     ORTHAGONAL_N,
     ORTHAGONAL_W,
     ORTHAGONAL_S,
     ORTHAGONAL_E,
-} Orthagonal;
+};
 
-typedef enum Diagonal {
+enum Diagonal {
     DIAGONAL_NE,
     DIAGONAL_NW,
     DIAGONAL_SW,
     DIAGONAL_SE,
-} Diagonal;
+};
 
-typedef enum CellBits {
-    CELL_BIT_ANY = 0,
-    CELL_BIT_DISCOVERED = 1 << 0,
-    CELL_BIT_VISIBLE = 1 << 1,
-    CELL_BIT_WALKABLE = 1 << 2,
-    CELL_BIT_WALL = 1 << 3,
-    CELL_BIT_CREATURE = 1 << 4,
+enum CellFlags {
+    CELL_FLAG_ANY = 0,
+    CELL_FLAG_DISCOVERED = 1 << 0,
+    CELL_FLAG_VISIBLE = 1 << 1,
+    CELL_FLAG_WALKABLE = 1 << 2,
+    CELL_FLAG_WALL = 1 << 3,
+    CELL_FLAG_CREATURE = 1 << 4,
 
-    PLAYER_WALKABLE = (CELL_BIT_WALKABLE | CELL_BIT_DISCOVERED),
-    CREATURE_WALKABLE = (CELL_BIT_WALKABLE),
-} CellBits;
+    CELL_FLAG_PLAYER_WALKABLE = (CELL_FLAG_WALKABLE | CELL_FLAG_DISCOVERED),
+    CELL_FLAG_CREATURE_WALKABLE = (CELL_FLAG_WALKABLE),
+};
 
-typedef struct Cell {
+typedef struct IntX2 {
     int x;
     int y;
-} Cell;
+} IntX2;
 
-bool cell_eq(Cell a, Cell b) {
-    return (a.x == b.x) && (a.y == b.y);
-}
-
-bool cell_neq(Cell a, Cell b) {
-    return (a.x != b.x) || (a.y != b.y);
-}
+bool intX2_eq(IntX2 a, IntX2 b) { return (a.x == b.x) && (a.y == b.y); }
+bool intX2_neq(IntX2 a, IntX2 b) { return (a.x != b.x) || (a.y != b.y); }
+IntX2 intX2_add(IntX2 a, IntX2 b) { return (IntX2) { (a.x + b.x), (a.y) + b.y }; }
+IntX2 intX2_subtract(IntX2 a, IntX2 b) { return (IntX2) { (a.x - b.x), (a.y) - b.y }; }
+IntX2 intX2_multiply(IntX2 a, int factor) { return (IntX2) { (a.x * factor), (a.y) * factor }; }
+IntX2 intX2_divide(IntX2 a, int divisor) { return (IntX2) { (a.x / divisor), (a.y) / divisor }; }
 
 typedef struct CoordAndDirection {
-    Cell coord;
+    IntX2 coord;
     uint8 direction;
 } CoordAndDirection;
 
 typedef struct ANode {
-    Cell position;
+    IntX2 position;
     int g_cost;
     int f_cost;
     struct ANode *came_from;
@@ -97,26 +103,28 @@ typedef enum CreatureType {
     CREATURE_BIG_EVIL_TRIANGLE,
 } CreatureType;
 
-typedef enum CreatureBits {
-    CREATURE_BIT_NONE,
-    CREATURE_BIT_DISCOVERED = 1 << 0,
-    CREATURE_BIT_VISIBLE = 1 << 1,
-} CreatureBits;
+enum CreatureFlags {
+    CREATURE_FLAG_NONE,
+    CREATURE_FLAG_DISCOVERED = 1 << 0,
+    CREATURE_FLAG_VISIBLE = 1 << 1,
+};
 
 typedef struct Creature {
     CreatureType type;
-    int bits;
-    Cell previous_position;
-    Cell position;
+    int flags;
+    IntX2 previous_position;
+    IntX2 position;
     uint16 direction;
     union {
-        Cell last_known_player_location;
+        IntX2 last_known_player_location;
     };
-    
 } Creature;
 
 typedef struct State {
-    Cell mouse_target_coord;
+    IntX2 game_offset;
+    int flags;
+    IntX2 mouse_current;
+    IntX2 mouse_target;
     uint8 grid[GRID_WIDTH][GRID_HEIGHT];
     AStar a_star;
     Creature player;
@@ -125,28 +133,64 @@ typedef struct State {
     float animation_timer;
 } State;
 
-bool has_bit(int flags, int flag) {
+IntX2 screen_to_game_position(State *state, Vector2 screen_position) {
+    IntX2 game_position = {
+        .x = (screen_position.x / CELLSIZE) + state->game_offset.x,
+        .y = (screen_position.y / CELLSIZE) + state->game_offset.y,
+    };
+
+    if (game_position.x < 0) {
+        game_position.x = 0;
+    } else if (game_position.x >= (GRID_WIDTH - 1)) {
+        game_position.x = GRID_WIDTH - 1;
+    }
+
+    if (game_position.y < 0) {
+        game_position.y = 0;
+    } else if (game_position.y >= (GRID_HEIGHT - 1)) {
+        game_position.y = GRID_HEIGHT - 1;
+    }
+
+    return game_position;
+}
+
+IntX2 get_cell_local_position(State *state, IntX2 local_position) {
+    return (IntX2) {
+        local_position.x - state->game_offset.x,
+        local_position.y - state->game_offset.y,
+    };
+}
+
+IntX2 astar_path(State *state, IntX2 start, IntX2 goal, int walkable_flags);
+
+static inline bool has_flag(int flags, int flag) {
     return (flags & flag) == flag;
 }
 
-int manhattan_distance(Cell a, Cell b) {
+static inline int manhattan_distance(IntX2 a, IntX2 b) {
     return abs(a.x - b.x) + abs(a.y - b.y);
 }
 
-bool is_valid_cell(State *state, Cell position, int cell_bits) {
+static inline bool is_cell_out_of_bounds(State *state, IntX2 cell) {
     return (
-        position.x >= 0 && position.x < GRID_WIDTH &&
-        position.y >= 0 && position.y < GRID_HEIGHT &&
-        (state->grid[position.x][position.y] & cell_bits) == cell_bits
+        cell.x < 0 || cell.x > (GRID_WIDTH - 1) ||
+        cell.y < 0 || cell.y > (GRID_HEIGHT - 1)
     );
 }
 
-Cell cell_in_direction(Cell position, uint8 direction) {
+static inline bool is_cell_valid(State *state, IntX2 cell, int cell_flags) {
+    return (
+        !is_cell_out_of_bounds(state, cell) &&
+        (state->grid[cell.x][cell.y] & cell_flags) == cell_flags
+    );
+}
+
+IntX2 cell_in_direction(IntX2 position, uint8 direction) {
     switch (direction) {
-    case ORTHAGONAL_N: return (Cell) { position.x, position.y - 1 };
-    case ORTHAGONAL_W: return (Cell) { position.x - 1, position.y };
-    case ORTHAGONAL_S: return (Cell) { position.x, position.y + 1 };
-    case ORTHAGONAL_E: return (Cell) { position.x + 1, position.y };
+    case ORTHAGONAL_N: return (IntX2) { position.x, position.y - 1 };
+    case ORTHAGONAL_W: return (IntX2) { position.x - 1, position.y };
+    case ORTHAGONAL_S: return (IntX2) { position.x, position.y + 1 };
+    case ORTHAGONAL_E: return (IntX2) { position.x + 1, position.y };
     default: return position;
     }
 }
