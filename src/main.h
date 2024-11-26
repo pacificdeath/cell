@@ -5,26 +5,28 @@
 #include <math.h>
 #include "../raylib/include/raylib.h"
 
-#define GRID_WIDTH 401
-#define GRID_HEIGHT 301
+#define GRID_WIDTH 128
+#define GRID_HEIGHT 128
 #define GAME_WIDTH 40
 #define GAME_HEIGHT 30
 #define GRID_LARGEST_SIDE ((GRID_WIDTH > GRID_HEIGHT) ? GRID_WIDTH : GRID_HEIGHT)
 #define CELLAMOUNT (GRID_WIDTH * GRID_HEIGHT)
 #define CELLSIZE 40
+#define HALF_CELLSIZE (CELLSIZE / 2)
 #define SCREEN_WIDTH (CELLSIZE * GRID_WIDTH)
 #define SCREEN_HEIGHT (CELLSIZE * GRID_HEIGHT)
 #define CREATURE_CAPACITY 2
 #define TIME_PER_TURN 0.05f
 #define TIME_PER_ANIMATION 0.4f
+#define KEY_REPEAT_THRESHOLD 0.3f
 #define NO_DIRECTION 255
 #define INVALID_CELL ((IntX2) { -1, -1 })
 
 #define COLOR_UNDISCOVERED ((Color){0,0,0,255})
 #define COLOR_GROUND_VISIBLE ((Color){64,32,0,255})
-#define COLOR_GROUND_INVISIBLE ((Color){32,32,32,255})
+#define COLOR_GROUND_INVISIBLE ((Color){0,0,0,255})
 #define COLOR_WALL_VISIBLE ((Color){128,64,0,255})
-#define COLOR_WALL_INVISIBLE ((Color){64,64,64,255})
+#define COLOR_WALL_INVISIBLE ((Color){32,32,32,255})
 #define COLOR_PLAYER_PATH ((Color){0,255,0,64})
 #define COLOR_CREATURE_PLAYER ((Color){0,128,255,255})
 #define COLOR_CREATURE_ENEMY ((Color){255,128,0,255})
@@ -130,7 +132,9 @@ typedef struct State {
     Creature player;
     Creature creatures[CREATURE_CAPACITY];
     float game_timer;
+    float turn_time;
     float animation_timer;
+    float key_repeat_timer;
 } State;
 
 IntX2 screen_to_game_position(State *state, Vector2 screen_position) {
@@ -193,6 +197,25 @@ IntX2 cell_in_direction(IntX2 position, uint8 direction) {
     case ORTHAGONAL_E: return (IntX2) { position.x + 1, position.y };
     default: return position;
     }
+}
+
+IntX2 get_turn_offset(State *state, Creature *c) {
+    return (IntX2) {
+        (((c->previous_position.x - c->position.x)) * (CELLSIZE - state->turn_time)),
+        (((c->previous_position.y - c->position.y)) * (CELLSIZE - state->turn_time)),
+    };
+}
+
+IntX2 get_turn_position(State *state, Creature *c) {
+    IntX2 player_turn_offset = get_turn_offset(state, &state->player);
+
+    IntX2 current = get_cell_local_position(state, c->position);
+    IntX2 previous = get_cell_local_position(state, c->previous_position);
+
+    return (IntX2) {
+        (previous.x * CELLSIZE) + ((current.x - previous.x) * state->turn_time) + HALF_CELLSIZE - player_turn_offset.x,
+        (previous.y * CELLSIZE) + ((current.y - previous.y) * state->turn_time) + HALF_CELLSIZE - player_turn_offset.y,
+    };
 }
 
 #endif

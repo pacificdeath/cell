@@ -10,17 +10,16 @@
 #include "movement.c"
 #include "renderer.c"
 
-uint8 get_direction(IntX2 from, IntX2 to) {
-    if (from.y > to.y) {
-        return ORTHAGONAL_N;
-    } else if (from.x > to.x) {
-        return ORTHAGONAL_W;
-    } else if (from.y < to.y) {
-        return ORTHAGONAL_S;
-    } else if (from.x < to.x) {
-        return ORTHAGONAL_E;
+void update_creature_direction(Creature *c) {
+    if (c->previous_position.y > c->position.y) {
+        c->direction = ORTHAGONAL_N;
+    } else if (c->previous_position.x > c->position.x) {
+        c->direction = ORTHAGONAL_W;
+    } else if (c->previous_position.y < c->position.y) {
+        c->direction = ORTHAGONAL_S;
+    } else if (c->previous_position.x < c->position.x) {
+        c->direction = ORTHAGONAL_E;
     }
-    return NO_DIRECTION;
 }
 
 void fill_cell(State *state, IntX2 position) {
@@ -97,10 +96,10 @@ int main(void) {
     discover_visible_cells(state);
 
     int input_key = 0;
+    bool player_arrow_key_move = false;
 
     while (!WindowShouldClose()) {
-        update_game_offset(state);
-
+        float frame_time = GetFrameTime();
         state->mouse_current = screen_to_game_position(state, GetMousePosition());
 
         bool left_mouse_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
@@ -109,14 +108,28 @@ int main(void) {
             state->player.position
         );
 
-        if (IsKeyDown(KEY_UP)) {
+        if (IsKeyPressed(KEY_UP)) {
             input_key = KEY_UP;
-        } else if (IsKeyDown(KEY_LEFT)) {
+            player_arrow_key_move = true;
+            state->key_repeat_timer = 0.0f;
+        } else if (IsKeyPressed(KEY_LEFT)) {
             input_key = KEY_LEFT;
-        } else if (IsKeyDown(KEY_DOWN)) {
+            player_arrow_key_move = true;
+            state->key_repeat_timer = 0.0f;
+        } else if (IsKeyPressed(KEY_DOWN)) {
             input_key = KEY_DOWN;
-        } else if (IsKeyDown(KEY_RIGHT)) {
+            player_arrow_key_move = true;
+            state->key_repeat_timer = 0.0f;
+        } else if (IsKeyPressed(KEY_RIGHT)) {
             input_key = KEY_RIGHT;
+            player_arrow_key_move = true;
+            state->key_repeat_timer = 0.0f;
+        } else if (IsKeyDown(input_key)) {
+            if (state->key_repeat_timer < KEY_REPEAT_THRESHOLD) {
+                state->key_repeat_timer += frame_time;
+            } else {
+                player_arrow_key_move = true;
+            }
         }
 
         if (mouse_condition) {
@@ -124,11 +137,10 @@ int main(void) {
         }
 
         bool wait = IsKeyPressed(KEY_SPACE);
-        if (mouse_condition || input_key || wait) {
+        if (mouse_condition || player_arrow_key_move || wait) {
             state->flags |= GAME_FLAG_IS_MOVING;
         }
 
-        float frame_time = GetFrameTime();
         state->animation_timer += frame_time;
         if (state->animation_timer >= TIME_PER_ANIMATION) {
             state->animation_timer -= TIME_PER_ANIMATION;
@@ -136,7 +148,8 @@ int main(void) {
 
         if (state->game_timer < TIME_PER_TURN) {
             state->game_timer += frame_time;
-        } else if (state->game_timer > TIME_PER_TURN && !has_flag(state->flags, GAME_FLAG_READY_FOR_UPDATE)) {
+        }
+        if (state->game_timer > TIME_PER_TURN && !has_flag(state->flags, GAME_FLAG_READY_FOR_UPDATE)) {
             state->game_timer = TIME_PER_TURN;
             state->flags |= GAME_FLAG_READY_FOR_UPDATE;
             for (int i = 0; i < CREATURE_CAPACITY; i++) {
@@ -158,7 +171,7 @@ int main(void) {
             if (wait) {
                 state->flags &= ~GAME_FLAG_IS_MOVING;
             } else {
-                if (input_key) {
+                if (player_arrow_key_move) {
                     state->flags &= ~GAME_FLAG_IS_MOVING;
                     IntX2 requested_cell = state->player.previous_position;
                     switch (input_key) {
@@ -170,16 +183,19 @@ int main(void) {
                     if (is_cell_valid(state, requested_cell, CELL_FLAG_WALKABLE)) {
                         state->player.position = requested_cell;
                     }
-                    input_key = 0;
+                    player_arrow_key_move = false;
                 } else {
                     state->player.position = astar_path(state, state->player.previous_position, state->mouse_target, CELL_FLAG_PLAYER_WALKABLE);
                     if (intX2_eq(state->player.position, state->mouse_target)) {
                         state->flags &= ~GAME_FLAG_IS_MOVING;
                     }
                 }
-                state->player.direction = get_direction(state->player.previous_position, state->player.position);
+                update_creature_direction(&state->player);
                 discover_visible_cells(state);
             }
+
+            update_game_offset(state);
+
 
             for (int i = 0; i < CREATURE_CAPACITY; i++) {
                 Creature *c = &state->creatures[i];
@@ -211,7 +227,7 @@ int main(void) {
                     if (can_see_player) {
                         c->last_known_player_location = state->player.position;
                     }
-                    c->direction = get_direction(old_pos, new_pos);
+                    update_creature_direction(c);
                 } break;
                 }
                 c->position = new_pos;
@@ -224,6 +240,7 @@ int main(void) {
                 }
             }
         }
+        state->turn_time = (state->game_timer / TIME_PER_TURN) * CELLSIZE;
 
         render(state);
     }

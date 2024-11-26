@@ -20,15 +20,11 @@ void raycast_discover_cells(State *state, IntX2 start, IntX2 end) {
     }
 }
 
-void bresenham(State *state, IntX2 start, IntX2 end) { 
+void bresenham(State *state, IntX2 start, IntX2 end) {
     int dx =  abs(end.x - start.x), sx = start.x < end.x ? 1 : -1;
-    int dy = -abs(end.y - start.y), sy = start.y < end.y ? 1 : -1; 
+    int dy = -abs(end.y - start.y), sy = start.y < end.y ? 1 : -1;
     int err = dx + dy, e2;
     while (true) {
-        if (start.x == end.x && start.y == end.y) break;
-        e2 = 2*err;
-        if (e2 >= dy) { err += dy; start.x += sx; }
-        if (e2 <= dx) { err += dx; start.y += sy; }
         IntX2 ray_cell = { start.x, start.y };
         if (is_cell_out_of_bounds(state, ray_cell)) {
             break;
@@ -38,6 +34,10 @@ void bresenham(State *state, IntX2 start, IntX2 end) {
         if (has_flag(*flags, CELL_FLAG_WALL)) {
             break;
         }
+        if (start.x == end.x && start.y == end.y) break;
+        e2 = 2*err;
+        if (e2 >= dy) { err += dy; start.x += sx; }
+        if (e2 <= dx) { err += dx; start.y += sy; }
     }
 }
 

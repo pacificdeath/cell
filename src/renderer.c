@@ -2,10 +2,11 @@
 #include "main.h"
 
 void draw_cell(State *state, IntX2 cell, Color color) {
-    IntX2 local_position = get_cell_local_position(state, cell);
+    IntX2 cell_local_position = get_cell_local_position(state, cell);
+    IntX2 player_turn_offset = get_turn_offset(state, &state->player);
     Rectangle rec = {
-        .x = local_position.x * CELLSIZE,
-        .y = local_position.y * CELLSIZE,
+        .x = (cell_local_position.x * CELLSIZE) - player_turn_offset.x,
+        .y = (cell_local_position.y * CELLSIZE) - player_turn_offset.y,
         .width = CELLSIZE,
         .height = CELLSIZE
     };
@@ -13,42 +14,32 @@ void draw_cell(State *state, IntX2 cell, Color color) {
 }
 
 void draw_evil_triangle(State *state, IntX2 center, float size, Color color) {
-    int half_cell = CELLSIZE / 2;
     const float d = (2.0f * PI) / 3.0f;
     const float time = state->animation_timer / TIME_PER_ANIMATION;
     Vector2 v[3];
     for (int i = 0; i < 3; i++) {
         float value = (d * i) + (time * d);
         v[i] = (Vector2) {
-            .x = center.x + (sin(value) * half_cell * size),
-            .y = center.y + (cos(value) * half_cell * size),
+            .x = center.x + (sin(value) * HALF_CELLSIZE * size),
+            .y = center.y + (cos(value) * HALF_CELLSIZE * size),
         };
     }
     DrawTriangle(v[0], v[1], v[2], color);
 }
 
 void draw_creature(State *state, Creature *c) {
-    int half_cell = CELLSIZE / 2;
-    int relative_time = (state->game_timer / TIME_PER_TURN) * CELLSIZE;
-
-    IntX2 current = get_cell_local_position(state, c->position);
-    IntX2 previous = get_cell_local_position(state, c->previous_position);
-
-    IntX2 body = {
-        (previous.x * CELLSIZE) + ((current.x - previous.x) * relative_time) + half_cell,
-        (previous.y * CELLSIZE) + ((current.y - previous.y) * relative_time) + half_cell,
-    };
+    IntX2 body = get_turn_position(state, c);
 
     int eye_radius;
     bool diagonal_eye = false;
     switch (c->type) {
     case CREATURE_PLAYER: {
-        DrawCircle(body.x, body.y, half_cell, COLOR_CREATURE_PLAYER);
+        DrawCircle(body.x, body.y, HALF_CELLSIZE, COLOR_CREATURE_PLAYER);
         eye_radius = 0.3f * CELLSIZE;
     } break;
     case CREATURE_DIGGER: {
         Rectangle rec = { body.x, body.y, CELLSIZE, CELLSIZE };
-        Vector2 origin = { half_cell, half_cell };
+        Vector2 origin = { HALF_CELLSIZE, HALF_CELLSIZE };
         DrawRectanglePro(rec, origin, 0.0f, GREEN);
     } break;
     case CREATURE_EVIL_TRIANGLE: {
