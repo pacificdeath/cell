@@ -1,9 +1,9 @@
 #include "../raylib/include/raylib.h"
 #include "main.h"
 
-void draw_cell(State *state, IntX2 cell, Color color) {
-    IntX2 cell_local_position = get_cell_local_position(state, cell);
-    IntX2 player_turn_offset = get_turn_offset(state, &state->player);
+void draw_cell(State *state, Cell cell, Color color) {
+    Cell cell_local_position = get_cell_local_position(state, cell);
+    Cell player_turn_offset = get_turn_offset(state, &state->player);
     Rectangle rec = {
         .x = (cell_local_position.x * CELLSIZE) - player_turn_offset.x,
         .y = (cell_local_position.y * CELLSIZE) - player_turn_offset.y,
@@ -13,7 +13,7 @@ void draw_cell(State *state, IntX2 cell, Color color) {
     DrawRectangleRec(rec, color);
 }
 
-void draw_evil_triangle(State *state, IntX2 center, float size, Color color) {
+void draw_evil_triangle(State *state, Cell center, float size, Color color) {
     const float d = (2.0f * PI) / 3.0f;
     const float time = state->animation_timer / TIME_PER_ANIMATION;
     Vector2 v[3];
@@ -28,7 +28,7 @@ void draw_evil_triangle(State *state, IntX2 center, float size, Color color) {
 }
 
 void draw_creature(State *state, Creature *c) {
-    IntX2 body = get_turn_position(state, c);
+    Cell body = get_turn_position(state, c);
 
     int eye_radius;
     bool diagonal_eye = false;
@@ -56,7 +56,7 @@ void draw_creature(State *state, Creature *c) {
     DrawCircle(body.x, body.y, eye_radius, WHITE);
 
     int pupil_radius = eye_radius * 0.4f;
-    IntX2 pupil = {0,0};
+    Cell pupil = {0,0};
     int off = eye_radius * 0.25f;
     if (diagonal_eye) {
         switch (c->direction) {
@@ -82,15 +82,15 @@ void render(State *state) {
 
     ClearBackground(COLOR_UNDISCOVERED);
 
-    IntX2 min = {
+    Cell min = {
         (state->game_offset.x >= 0) ? state->game_offset.x : 0,
         (state->game_offset.y >= 0) ? state->game_offset.y : 0
     };
-    IntX2 game_max = {
+    Cell game_max = {
         state->game_offset.x + GAME_WIDTH,
         state->game_offset.y + GAME_HEIGHT
     };
-    IntX2 max = {
+    Cell max = {
         (game_max.x < GRID_WIDTH) ? game_max.x : GRID_WIDTH,
         (game_max.y < GRID_HEIGHT) ? game_max.y : GRID_HEIGHT,
     };
@@ -106,13 +106,13 @@ void render(State *state) {
                 } else {
                     color = wall ? COLOR_WALL_INVISIBLE : COLOR_GROUND_INVISIBLE;
                 }
-                draw_cell(state, (IntX2) { x, y }, color);
+                draw_cell(state, (Cell) { x, y }, color);
             }
         }
     }
 
-    IntX2 player_path = astar_path(state, state->player.position, state->mouse_current, CELL_FLAG_PLAYER_WALKABLE);
-    bool player_path_found = intX2_neq(player_path, state->player.position);
+    Cell player_path = astar_path(state, state->player.position, state->mouse_current, CELL_FLAG_PLAYER_WALKABLE);
+    bool player_path_found = cell_neq(player_path, state->player.position);
     bool mouse_cell_discovered = !has_flag(state->grid[state->mouse_current.x][state->mouse_current.y], CELL_FLAG_DISCOVERED);
     if (!player_path_found || mouse_cell_discovered) {
         draw_cell(state, state->mouse_current, RED);
@@ -121,7 +121,7 @@ void render(State *state) {
             draw_cell(state, state->player.position, COLOR_PLAYER_PATH);
             draw_cell(state, player_path, COLOR_PLAYER_PATH);
         }
-        while (!has_flag(state->flags, GAME_FLAG_IS_MOVING) && intX2_neq(player_path, state->mouse_current)) {
+        while (!has_flag(state->flags, GAME_FLAG_IS_MOVING) && cell_neq(player_path, state->mouse_current)) {
             player_path = astar_path(state, player_path, state->mouse_current, CELL_FLAG_PLAYER_WALKABLE);
             draw_cell(state, player_path, COLOR_PLAYER_PATH);
         }
@@ -142,5 +142,32 @@ void render(State *state) {
         draw_creature(state, c);
     }
 
+    EndDrawing();
+}
+
+void draw_map_only(State *state) {
+    int w = GetScreenWidth() / GRID_WIDTH;
+    int h = GetScreenHeight() / GRID_HEIGHT;
+    BeginDrawing();
+    for (int x = 0; x < GRID_WIDTH; x++) {
+        for (int y = 0; y < GRID_HEIGHT; y++) {
+            Rectangle rec = {
+                .x = w * x,
+                .y = h * y,
+                .width = w,
+                .height = h
+            };
+            int cell = state->grid[x][y];
+            bool visible = has_flag(cell, CELL_FLAG_VISIBLE);
+            bool wall = has_flag(cell, CELL_FLAG_WALL);
+            Color color;
+            if (visible) {
+                color = wall ? COLOR_WALL_VISIBLE : COLOR_GROUND_VISIBLE;
+            } else {
+                color = wall ? COLOR_WALL_INVISIBLE : COLOR_GROUND_INVISIBLE;
+            }
+            DrawRectangleRec(rec, color);
+        }
+    }
     EndDrawing();
 }

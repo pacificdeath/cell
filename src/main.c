@@ -22,49 +22,14 @@ void update_creature_direction(Creature *c) {
     }
 }
 
-void fill_cell(State *state, IntX2 position) {
+void fill_cell(State *state, Cell position) {
     state->grid[position.x][position.y] &= ~CELL_FLAG_WALKABLE;
     state->grid[position.x][position.y] |= CELL_FLAG_WALKABLE;
 }
 
-void print_grid(State *state) {
-    printf("   ");
-    for (int x = 0; x < GRID_WIDTH; x++) {
-        printf("%02i ", x);
-    }
-    printf("\n");
-    for (int y = 0; y < GRID_HEIGHT; y++) {
-        printf("%02i: ", y);
-        for (int x = 0; x < GRID_WIDTH; x++) {
-            printf("%-2x ", state->grid[x][y]);
-        }
-        printf("\n");
-    }
-}
-
-void print_a_star(AStar *a, IntX2 start, IntX2 goal, int (* operation)(ANode *)) {
-    printf("* * * * * * * * * * * *\n");
-    for (int y = 0; y < GRID_HEIGHT; y++) {
-        for (int x = 0; x < GRID_WIDTH; x++) {
-            ANode *n = &a->all_list[x][y];
-            int something = operation(n);
-            if (intX2_eq(n->position, start)) {
-                printf("<@> ");
-            } else if (intX2_eq(n->position, goal)) {
-                printf("<X> ");
-            } else if (something > 999) {
-                printf("--- ");
-            } else {
-                printf("%03i ", something);
-            }
-        }
-        printf("\n");
-    }
-}
-
 void update_game_offset(State *state) {
-    IntX2 local_dimensions = { GAME_WIDTH, GAME_HEIGHT };
-    state->game_offset = intX2_subtract(state->player.position, intX2_divide(local_dimensions, 2));
+    Cell local_dimensions = { GAME_WIDTH, GAME_HEIGHT };
+    state->game_offset = cell_subtract(state->player.position, cell_divide(local_dimensions, 2));
 }
 
 int main(void) {
@@ -74,6 +39,10 @@ int main(void) {
     InitWindow(screen_width, screen_height, "Cell");
 
     SetTargetFPS(60);
+
+    #if DEBUG
+    SetRandomSeed(8);
+    #endif
 
     State *state = (State *)calloc(1, sizeof(State));
 
@@ -97,13 +66,23 @@ int main(void) {
 
     int input_key = 0;
     bool player_arrow_key_move = false;
+    bool map_view = false;
 
     while (!WindowShouldClose()) {
         float frame_time = GetFrameTime();
         state->mouse_current = screen_to_game_position(state, GetMousePosition());
 
+        if (IsKeyPressed(KEY_M)) {
+            map_view = !map_view;
+        }
+
+        if (map_view) {
+            draw_map_only(state);
+            continue;
+        }
+
         bool left_mouse_pressed = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-        bool mouse_condition = left_mouse_pressed && intX2_neq(
+        bool mouse_condition = left_mouse_pressed && cell_neq(
             astar_path(state, state->player.position, state->mouse_current, CELL_FLAG_PLAYER_WALKABLE),
             state->player.position
         );
@@ -173,7 +152,7 @@ int main(void) {
             } else {
                 if (player_arrow_key_move) {
                     state->flags &= ~GAME_FLAG_IS_MOVING;
-                    IntX2 requested_cell = state->player.previous_position;
+                    Cell requested_cell = state->player.previous_position;
                     switch (input_key) {
                     case KEY_UP: requested_cell.y--; break;
                     case KEY_LEFT: requested_cell.x--; break;
@@ -186,23 +165,23 @@ int main(void) {
                     player_arrow_key_move = false;
                 } else {
                     state->player.position = astar_path(state, state->player.previous_position, state->mouse_target, CELL_FLAG_PLAYER_WALKABLE);
-                    if (intX2_eq(state->player.position, state->mouse_target)) {
+                    if (cell_eq(state->player.position, state->mouse_target)) {
                         state->flags &= ~GAME_FLAG_IS_MOVING;
                     }
                 }
                 update_creature_direction(&state->player);
+
+                set_invisible(state);
+                update_game_offset(state);
                 discover_visible_cells(state);
             }
-
-            update_game_offset(state);
-
 
             for (int i = 0; i < CREATURE_CAPACITY; i++) {
                 Creature *c = &state->creatures[i];
                 c->previous_position = c->position;
-                IntX2 old_pos = c->previous_position;
+                Cell old_pos = c->previous_position;
                 state->grid[old_pos.x][old_pos.y] &= ~CELL_FLAG_CREATURE;
-                IntX2 new_pos = old_pos;
+                Cell new_pos = old_pos;
                 switch (c->type) {
                 case CREATURE_DIGGER: {
                     new_pos = random_wander(state, old_pos, c->direction);
@@ -213,13 +192,13 @@ int main(void) {
                     c->direction = cad.direction;
                 } break;
                 case CREATURE_BIG_EVIL_TRIANGLE: {
-                    if (intX2_neq(c->last_known_player_location, INVALID_CELL)) {
+                    if (cell_neq(c->last_known_player_location, INVALID_CELL)) {
                         new_pos = astar_path(state, old_pos, c->last_known_player_location, CELL_FLAG_CREATURE_WALKABLE);
-                        if (intX2_eq(new_pos, old_pos)) {
+                        if (cell_eq(new_pos, old_pos)) {
                             c->last_known_player_location = INVALID_CELL;
                         }
                     }
-                    if (intX2_eq(new_pos, old_pos)) {
+                    if (cell_eq(new_pos, old_pos)) {
                         new_pos = random_wander(state, old_pos, c->direction);
                     }
 

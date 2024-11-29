@@ -20,12 +20,13 @@
 #define TIME_PER_ANIMATION 0.4f
 #define KEY_REPEAT_THRESHOLD 0.3f
 #define NO_DIRECTION 255
-#define INVALID_CELL ((IntX2) { -1, -1 })
+#define INVALID_CELL ((Cell) { -1, -1 })
+#define ROOM_CAPACITY 100
 
 #define COLOR_UNDISCOVERED ((Color){0,0,0,255})
-#define COLOR_GROUND_VISIBLE ((Color){64,32,0,255})
-#define COLOR_GROUND_INVISIBLE ((Color){0,0,0,255})
-#define COLOR_WALL_VISIBLE ((Color){128,64,0,255})
+#define COLOR_GROUND_VISIBLE ((Color){0,32,64,255})
+#define COLOR_GROUND_INVISIBLE ((Color){16,16,16,255})
+#define COLOR_WALL_VISIBLE ((Color){0,64,128,255})
 #define COLOR_WALL_INVISIBLE ((Color){32,32,32,255})
 #define COLOR_PLAYER_PATH ((Color){0,255,0,64})
 #define COLOR_CREATURE_PLAYER ((Color){0,128,255,255})
@@ -66,25 +67,43 @@ enum CellFlags {
     CELL_FLAG_CREATURE_WALKABLE = (CELL_FLAG_WALKABLE),
 };
 
-typedef struct IntX2 {
+typedef struct Cell {
     int x;
     int y;
-} IntX2;
+} Cell;
 
-bool intX2_eq(IntX2 a, IntX2 b) { return (a.x == b.x) && (a.y == b.y); }
-bool intX2_neq(IntX2 a, IntX2 b) { return (a.x != b.x) || (a.y != b.y); }
-IntX2 intX2_add(IntX2 a, IntX2 b) { return (IntX2) { (a.x + b.x), (a.y) + b.y }; }
-IntX2 intX2_subtract(IntX2 a, IntX2 b) { return (IntX2) { (a.x - b.x), (a.y) - b.y }; }
-IntX2 intX2_multiply(IntX2 a, int factor) { return (IntX2) { (a.x * factor), (a.y) * factor }; }
-IntX2 intX2_divide(IntX2 a, int divisor) { return (IntX2) { (a.x / divisor), (a.y) / divisor }; }
+bool cell_eq(Cell a, Cell b) { return (a.x == b.x) && (a.y == b.y); }
+bool cell_neq(Cell a, Cell b) { return (a.x != b.x) || (a.y != b.y); }
+Cell cell_add(Cell a, Cell b) { return (Cell) { (a.x + b.x), (a.y) + b.y }; }
+Cell cell_subtract(Cell a, Cell b) { return (Cell) { (a.x - b.x), (a.y) - b.y }; }
+Cell cell_multiply(Cell a, int factor) { return (Cell) { (a.x * factor), (a.y) * factor }; }
+Cell cell_divide(Cell a, int divisor) { return (Cell) { (a.x / divisor), (a.y) / divisor }; }
+
+typedef struct Room {
+    Cell position;
+    Cell size;
+} Room;
+
+typedef struct Tunneler {
+    int lifetime;
+    Cell position;
+    int direction;
+    int width;
+    int padding;
+    int chance_to_turn;
+} Tunneler;
+
+typedef struct MapGen {
+    Room rooms[ROOM_CAPACITY];
+} MapGen;
 
 typedef struct CoordAndDirection {
-    IntX2 coord;
+    Cell coord;
     uint8 direction;
 } CoordAndDirection;
 
 typedef struct ANode {
-    IntX2 position;
+    Cell position;
     int g_cost;
     int f_cost;
     struct ANode *came_from;
@@ -114,19 +133,19 @@ enum CreatureFlags {
 typedef struct Creature {
     CreatureType type;
     int flags;
-    IntX2 previous_position;
-    IntX2 position;
+    Cell previous_position;
+    Cell position;
     uint16 direction;
     union {
-        IntX2 last_known_player_location;
+        Cell last_known_player_location;
     };
 } Creature;
 
 typedef struct State {
-    IntX2 game_offset;
+    Cell game_offset;
     int flags;
-    IntX2 mouse_current;
-    IntX2 mouse_target;
+    Cell mouse_current;
+    Cell mouse_target;
     uint8 grid[GRID_WIDTH][GRID_HEIGHT];
     AStar a_star;
     Creature player;
@@ -137,8 +156,8 @@ typedef struct State {
     float key_repeat_timer;
 } State;
 
-IntX2 screen_to_game_position(State *state, Vector2 screen_position) {
-    IntX2 game_position = {
+Cell screen_to_game_position(State *state, Vector2 screen_position) {
+    Cell game_position = {
         .x = (screen_position.x / CELLSIZE) + state->game_offset.x,
         .y = (screen_position.y / CELLSIZE) + state->game_offset.y,
     };
@@ -158,61 +177,61 @@ IntX2 screen_to_game_position(State *state, Vector2 screen_position) {
     return game_position;
 }
 
-IntX2 get_cell_local_position(State *state, IntX2 local_position) {
-    return (IntX2) {
+Cell get_cell_local_position(State *state, Cell local_position) {
+    return (Cell) {
         local_position.x - state->game_offset.x,
         local_position.y - state->game_offset.y,
     };
 }
 
-IntX2 astar_path(State *state, IntX2 start, IntX2 goal, int walkable_flags);
+Cell astar_path(State *state, Cell start, Cell goal, int walkable_flags);
 
 static inline bool has_flag(int flags, int flag) {
     return (flags & flag) == flag;
 }
 
-static inline int manhattan_distance(IntX2 a, IntX2 b) {
+static inline int manhattan_distance(Cell a, Cell b) {
     return abs(a.x - b.x) + abs(a.y - b.y);
 }
 
-static inline bool is_cell_out_of_bounds(State *state, IntX2 cell) {
+static inline bool is_cell_out_of_bounds(State *state, Cell cell) {
     return (
         cell.x < 0 || cell.x > (GRID_WIDTH - 1) ||
         cell.y < 0 || cell.y > (GRID_HEIGHT - 1)
     );
 }
 
-static inline bool is_cell_valid(State *state, IntX2 cell, int cell_flags) {
+static inline bool is_cell_valid(State *state, Cell cell, int cell_flags) {
     return (
         !is_cell_out_of_bounds(state, cell) &&
         (state->grid[cell.x][cell.y] & cell_flags) == cell_flags
     );
 }
 
-IntX2 cell_in_direction(IntX2 position, uint8 direction) {
+Cell get_cell_in_direction(Cell position, uint8 direction, int amount) {
     switch (direction) {
-    case ORTHAGONAL_N: return (IntX2) { position.x, position.y - 1 };
-    case ORTHAGONAL_W: return (IntX2) { position.x - 1, position.y };
-    case ORTHAGONAL_S: return (IntX2) { position.x, position.y + 1 };
-    case ORTHAGONAL_E: return (IntX2) { position.x + 1, position.y };
+    case ORTHAGONAL_N: return (Cell) { position.x, position.y - amount };
+    case ORTHAGONAL_W: return (Cell) { position.x - amount, position.y };
+    case ORTHAGONAL_S: return (Cell) { position.x, position.y + amount };
+    case ORTHAGONAL_E: return (Cell) { position.x + amount, position.y };
     default: return position;
     }
 }
 
-IntX2 get_turn_offset(State *state, Creature *c) {
-    return (IntX2) {
+Cell get_turn_offset(State *state, Creature *c) {
+    return (Cell) {
         (((c->previous_position.x - c->position.x)) * (CELLSIZE - state->turn_time)),
         (((c->previous_position.y - c->position.y)) * (CELLSIZE - state->turn_time)),
     };
 }
 
-IntX2 get_turn_position(State *state, Creature *c) {
-    IntX2 player_turn_offset = get_turn_offset(state, &state->player);
+Cell get_turn_position(State *state, Creature *c) {
+    Cell player_turn_offset = get_turn_offset(state, &state->player);
 
-    IntX2 current = get_cell_local_position(state, c->position);
-    IntX2 previous = get_cell_local_position(state, c->previous_position);
+    Cell current = get_cell_local_position(state, c->position);
+    Cell previous = get_cell_local_position(state, c->previous_position);
 
-    return (IntX2) {
+    return (Cell) {
         (previous.x * CELLSIZE) + ((current.x - previous.x) * state->turn_time) + HALF_CELLSIZE - player_turn_offset.x,
         (previous.y * CELLSIZE) + ((current.y - previous.y) * state->turn_time) + HALF_CELLSIZE - player_turn_offset.y,
     };
